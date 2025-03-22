@@ -1,8 +1,13 @@
 use std::path::Path;
 
 use eframe::{NativeOptions, egui::ViewportBuilder};
-use image::ImageReader;
-use rsstv::{SAMPLE_RATE, app::RSSTV, common::SSTVMode, martinm1::MartinM1};
+use image::{ImageFormat, ImageReader};
+use rsstv::{
+    SAMPLE_RATE,
+    app::RSSTV,
+    common::{SSTVMode, Signal},
+    martinm1::MartinM1,
+};
 
 use clap::Parser;
 use wavers::Wav;
@@ -27,7 +32,9 @@ fn main() {
     if args.decode {
         let samples = Wav::from_path(args.input_file).unwrap().read().unwrap();
 
-        mode.decode(&samples.to_vec());
+        let out = mode.decode(&samples.to_vec());
+
+        out.save_with_format("out.png", ImageFormat::Png).unwrap();
     } else {
         let reader = ImageReader::open(args.input_file)
             .unwrap()
@@ -35,6 +42,9 @@ fn main() {
             .unwrap();
 
         let signal = mode.encode(reader);
+
+        //let mut signal = Signal::new();
+        //signal.push(1200, 50000.);
 
         let written: &[i16] = &signal.to_samples().convert();
         wavers::write(Path::new(&args.ouput_file), written, SAMPLE_RATE as i32, 1).unwrap();

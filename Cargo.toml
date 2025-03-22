@@ -7,6 +7,8 @@ edition = "2024"
 clap = { version = "4.5.31", features = ["derive"] }
 eframe = { version = "*", default-features = false, features = ["glow", "wayland", "x11"] }
 egui_extras = { version = "0.31.1", features = ["image", "all_loaders"] }
+hilbert_transform = "0.1.1"
 image = "0.25.5"
 num-complex = "0.4.6"
+simple-plot = "0.1.2"
 wavers = "1.5.1"

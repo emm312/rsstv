@@ -1,13 +1,18 @@
 use std::u8;
 
-use image::{ColorType, DynamicImage, GenericImageView, Pixel, imageops::FilterType};
-use wavers::write;
+use image::{imageops::FilterType, ColorType, DynamicImage, GenericImage, GenericImageView, Pixel, RgbImage};
+use simple_plot::plot;
 
-use crate::{common::{SSTVMode, Signal}, dsp, SAMPLE_RATE};
+use crate::{
+    SAMPLE_RATE,
+    common::{self, DSPOut, SSTVMode, Signal, within_50hz},
+    dsp,
+};
 
 pub struct MartinM1 {
     decoded_image: DynamicImage,
     samples: Vec<i16>,
+    current_pos: usize,
 }
 
 impl SSTVMode for MartinM1 {
@@ -15,6 +20,7 @@ impl SSTVMode for MartinM1 {
         MartinM1 {
             decoded_image: DynamicImage::new(320, 256, ColorType::Rgb16),
             samples: Vec::new(),
+            current_pos: 0,
         }
     }
 
@@ -61,19 +67,88 @@ impl SSTVMode for MartinM1 {
                 colour_sep(&mut out);
             }
         }
-
+        out.push(0, 1000_000.);
         out
     }
 
-    fn decode(&mut self, audio: &Vec<i16>) {
+    fn decode(&mut self, audio: &Vec<i16>) -> DynamicImage {
         self.samples.append(&mut audio.clone());
 
-        let out: &[i16] = &dsp::quadrature_demod(&audio).iter().map(|n| *n as i16).collect::<Vec<i16>>();
-        write("dsp_out.wav", out, SAMPLE_RATE as i32, 1).unwrap();
+        let demod_waveform = dsp::quadrature_demod(&audio);
+
+        let mut out = DSPOut::new(&demod_waveform);
+
+        self.get_calibration_header(&mut out);
+
+        let mut image = DynamicImage::new(320, 256, ColorType::Rgb16);
+
+        for i in 0..256 {
+            out.take_till_frq(1200.);
+            out.take_while_frq(1200.);
+
+            out.take_till_frq(1500.);
+            out.take_while_frq(1500.);
+            for colour in [1, 2, 0] {
+                for j in 0..320 {
+                    let val = out.take_us(457.6).unwrap();
+
+                    let brightness = (val - 1500.) / (2300. - 1500.);
+
+                    let mut rgb = image.get_pixel(j, i);
+
+                    rgb.channels_mut()[colour] = (brightness * 255.) as u8;
+
+                    image.put_pixel(j, i, rgb);
+                }
+                out.take_till_frq(1500.);
+                out.take_while_frq(1500.);
+            }
+        }
+        image
     }
 
     fn get_image(&self) -> image::DynamicImage {
         self.decoded_image.clone()
+    }
+}
+
+impl MartinM1 {
+    fn get_calibration_header(&mut self, sig: &mut DSPOut) -> Option<u8> {
+        sig.take_till_frq(1900.)?;
+
+        sig.take_while_frq(1900.)?;
+
+        sig.take_till_frq(1200.)?;
+
+        sig.take_till_frq(1900.)?;
+        sig.take_while_frq(1900.)?;
+
+        let vis = [
+            sig.take_us(30_000.)? < 1200.,
+            sig.take_us(30_000.)? < 1200.,
+            sig.take_us(30_000.)? < 1200.,
+            sig.take_us(30_000.)? < 1200.,
+            sig.take_us(30_000.)? < 1200.,
+            sig.take_us(30_000.)? < 1200.,
+        ];
+
+        let parity = sig.take_us(30_000.)? < 1200.;
+
+        // even parity check
+        //assert!(
+        //    vis.iter().map(|b| *b as u8).sum::<u8>() % 2 != parity as u8,
+        //    "parity bit failed"
+        //);
+
+        sig.take_while_frq(1200.)?;
+
+        let mut total = 0;
+
+        for (pos, elem) in vis.iter().enumerate() {
+            total += 2_u8.pow((6 - pos) as u32) * (*elem as u8);
+        }
+
+        Some(total)
     }
 }
 

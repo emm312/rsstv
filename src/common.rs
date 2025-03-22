@@ -42,8 +42,71 @@ impl Signal {
 pub trait SSTVMode {
     fn new() -> Self;
     fn encode(&mut self, image: DynamicImage) -> Signal;
-    fn decode(&mut self, audio: &Vec<i16>) {
+    fn decode(&mut self, audio: &Vec<i16>) -> DynamicImage {
         todo!()
     }
     fn get_image(&self) -> DynamicImage;
+}
+
+pub fn within_50hz(a: f64, b: f64) -> bool {
+    (a - b).abs() < 150.
+}
+
+pub struct DSPOut {
+    inner: Vec<f64>,
+    pos: usize
+}
+
+impl DSPOut {
+    pub fn new(from: &Vec<f64>) -> DSPOut {
+        DSPOut {
+            inner: from.clone(),
+            pos: 0
+        }
+    }
+
+    pub fn take_while_frq(&mut self, frq: f64) -> Option<()> {
+        let mut at = 0;
+        for i in self.pos..self.inner.len() {
+            if !within_50hz(*self.inner.get(i)?, frq) {
+                at = i;
+                break;
+            }
+        }
+
+        self.pos = at;
+        Some(())
+    }
+
+    pub fn take_till_frq(&mut self, frq: f64) -> Option<()> {
+        let mut at = 0;
+        for i in self.pos..self.inner.len() {
+            if within_50hz(*self.inner.get(i)?, frq) {
+                at = i;
+                break;
+            }
+        }
+
+        self.pos = at;
+        Some(())
+    }
+
+    pub fn take_us(&mut self, us: f64) -> Option<f64> {
+        let total_samples = us_to_n_samples(us);
+
+        let mut sum = 0.;
+
+        for i in self.pos..(self.pos + total_samples) {
+            sum += self.inner.get(i)?;
+        }
+
+        self.pos += total_samples;
+
+
+        Some(sum / (total_samples as f64))
+    }
+}
+
+fn us_to_n_samples(s: f64) -> usize {
+    (SAMPLE_RATE as f64 * (s / 1000000.)).round() as usize
 }
