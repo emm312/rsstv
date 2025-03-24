@@ -1,18 +1,22 @@
-use std::u8;
+use std::{time::{Duration, Instant}, u8};
 
-use image::{imageops::FilterType, ColorType, DynamicImage, GenericImage, GenericImageView, Pixel, RgbImage};
+use biquad::{Biquad, Coefficients, DirectForm1, ToHertz, Type};
+use image::{ColorType, DynamicImage, GenericImage, GenericImageView, Pixel, imageops::FilterType};
+use num_complex::Complex64;
 use simple_plot::plot;
 
 use crate::{
-    SAMPLE_RATE,
-    common::{self, DSPOut, SSTVMode, Signal, within_50hz},
-    dsp,
+    common::{us_to_n_samples, DSPOut, DecodeResult, SSTVMode, Signal}, dsp, SAMPLE_RATE
 };
 
 pub struct MartinM1 {
     decoded_image: DynamicImage,
-    samples: Vec<i16>,
-    current_pos: usize,
+    samples: Vec<f64>,
+    in_partial_decode: bool,
+    pos: usize,
+    row: u32,
+    last_quad_demod: Complex64,
+    prev_chunk: Vec<f32>
 }
 
 impl SSTVMode for MartinM1 {
@@ -20,13 +24,19 @@ impl SSTVMode for MartinM1 {
         MartinM1 {
             decoded_image: DynamicImage::new(320, 256, ColorType::Rgb16),
             samples: Vec::new(),
-            current_pos: 0,
+            in_partial_decode: false,
+            row: 0,
+            pos: 0,
+            last_quad_demod: Complex64::ZERO,
+            prev_chunk: Vec::new()
         }
     }
 
     fn encode(&mut self, image: image::DynamicImage) -> Signal {
         let resize = image.resize_exact(320, 256, FilterType::Nearest);
         let mut out = Signal::new();
+
+        out.push(0, 3_000_000.);
 
         out.push(1900, 300_000.);
         out.push(1200, 10_000.);
@@ -71,40 +81,95 @@ impl SSTVMode for MartinM1 {
         out
     }
 
-    fn decode(&mut self, audio: &Vec<i16>) -> DynamicImage {
-        self.samples.append(&mut audio.clone());
+    fn decode(&mut self, audio: &Vec<f32>) -> DecodeResult {
+        let fl = 1.khz();
+        let fh = 3.khz();
+        let fs = SAMPLE_RATE.hz();
 
-        let demod_waveform = dsp::quadrature_demod(&audio);
+        let coeffs_lp = Coefficients::<f64>::from_params(Type::LowPass, fs, fh, 1.).unwrap();
+        let coeffs_hp = Coefficients::<f64>::from_params(Type::HighPass, fs, fl, 1.).unwrap();
 
-        let mut out = DSPOut::new(&demod_waveform);
+        let mut biquad_lp = DirectForm1::<f64>::new(coeffs_lp);
+        let mut biquad_hp = DirectForm1::<f64>::new(coeffs_hp);
 
-        self.get_calibration_header(&mut out);
+        let mut filtered_lp = Vec::with_capacity(audio.len());
 
-        let mut image = DynamicImage::new(320, 256, ColorType::Rgb16);
+        for elem in [self.prev_chunk.clone(), audio.clone()].iter().flatten() {
+            filtered_lp.push(biquad_lp.run(*elem as f64));
+        }
 
-        for i in 0..256 {
-            out.take_till_frq(1200.);
-            out.take_while_frq(1200.);
+        let mut filtered_hp = Vec::with_capacity(audio.len());
+        for elem in filtered_lp {
+            filtered_hp.push(biquad_hp.run(elem));
+        }
 
-            out.take_till_frq(1500.);
-            out.take_while_frq(1500.);
-            for colour in [1, 2, 0] {
-                for j in 0..320 {
-                    let val = out.take_us(457.6).unwrap();
+        let mut res;
+        if self.in_partial_decode {
+            res = dsp::quadrature_demod(&filtered_hp.split_at(audio.len()).1.to_vec(), self.last_quad_demod)
+        } else {
+            res = dsp::quadrature_demod(&filtered_hp, self.last_quad_demod)
+        }
+        self.last_quad_demod = res.1;
+        self.samples.append(&mut res.0);
 
-                    let brightness = (val - 1500.) / (2300. - 1500.);
+        self.prev_chunk = audio.clone();
 
-                    let mut rgb = image.get_pixel(j, i);
+        //plot!("a", &demod_waveform);
+        let mut out = DSPOut::new(&self.samples);
 
-                    rgb.channels_mut()[colour] = (brightness * 255.) as u8;
+        out.set_to(self.pos);
 
-                    image.put_pixel(j, i, rgb);
-                }
-                out.take_till_frq(1500.);
-                out.take_while_frq(1500.);
+        if !self.in_partial_decode {
+            if let None = self.get_calibration_header(&mut out) {
+                return DecodeResult::NoneFound;
             }
         }
-        image
+
+        for i in self.row..256 {
+            let start_pos = out.get_pos();
+
+            if let None = out
+                .take_till_frq(1200.)
+                .and_then(|_| out.take_while_frq(1200.))
+                .and_then(|_| out.take_till_frq(1500.))
+                .and_then(|_| out.take_while_frq(1500.))
+            {
+                self.pos = start_pos;
+                self.in_partial_decode = true;
+                self.row = i;
+                return DecodeResult::Partial(self.decoded_image.clone());
+            }
+            for colour in [1, 2, 0] {
+                for j in 0..320 {
+                    if let Some(val) = out.take_us(457.6) {
+                        let brightness = (val - 1500.) / (2300. - 1500.);
+
+                        let mut rgb = self.decoded_image.get_pixel(j, i);
+
+                        rgb.channels_mut()[colour] = (brightness * 255.) as u8;
+
+                        self.decoded_image.put_pixel(j, i, rgb);
+                    } else {
+                        self.pos = start_pos;
+                        self.row = i;
+                        self.in_partial_decode = true;
+                        return DecodeResult::Partial(self.decoded_image.clone());
+                    }
+                }
+
+                if let None = out
+                    .take_till_frq(1500.)
+                    .and_then(|_| out.take_while_frq(1500.))
+                {
+                    self.pos = start_pos;
+                    self.row = i;
+                    self.in_partial_decode = true;
+                    return DecodeResult::Partial(self.decoded_image.clone());
+                }
+            }
+        }
+        
+        DecodeResult::Finished(self.decoded_image.clone())
     }
 
     fn get_image(&self) -> image::DynamicImage {
@@ -147,6 +212,8 @@ impl MartinM1 {
         for (pos, elem) in vis.iter().enumerate() {
             total += 2_u8.pow((6 - pos) as u32) * (*elem as u8);
         }
+
+        //println!("header found");
 
         Some(total)
     }

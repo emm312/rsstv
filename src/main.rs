@@ -1,11 +1,13 @@
-use std::path::Path;
+use std::{path::Path, sync::mpsc, time::Duration};
 
-use eframe::{NativeOptions, egui::ViewportBuilder};
+use cpal::{
+    StreamConfig,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+};
 use image::{ImageFormat, ImageReader};
 use rsstv::{
     SAMPLE_RATE,
-    app::RSSTV,
-    common::{SSTVMode, Signal},
+    common::{DecodeResult, SSTVMode},
     martinm1::MartinM1,
 };
 
@@ -15,13 +17,16 @@ use wavers::Wav;
 #[derive(Parser)]
 struct Args {
     #[clap()]
-    input_file: String,
+    input_file: Option<String>,
 
     #[clap(short, long, default_value = "out.wav")]
     ouput_file: String,
 
     #[clap(short, long)]
     decode: bool,
+
+    #[clap(short, long)]
+    mic: bool,
 }
 
 fn main() {
@@ -30,13 +35,67 @@ fn main() {
     let mut mode = MartinM1::new();
 
     if args.decode {
-        let samples = Wav::from_path(args.input_file).unwrap().read().unwrap();
+        if !args.mic {
+            let samples = Wav::from_path(args.input_file.unwrap())
+                .unwrap()
+                .read()
+                .unwrap();
 
-        let out = mode.decode(&samples.to_vec());
+            let chunks = samples.chunks(512);
 
-        out.save_with_format("out.png", ImageFormat::Png).unwrap();
+            for chunk in chunks {
+                let out = mode.decode(&chunk.to_vec());
+
+                match out {
+                    DecodeResult::Finished(image) | DecodeResult::Partial(image) => {
+                        image.save_with_format("out.png", ImageFormat::Png).unwrap()
+                    }
+                    DecodeResult::NoneFound => println!("No image found"),
+                }
+            }
+
+
+        } else {
+            let mut decoder = MartinM1::new();
+
+            let host = cpal::default_host();
+            let device = host.default_input_device().unwrap();
+
+            println!("using device {:?}", device.name().unwrap());
+
+            let config = device.default_input_config().unwrap();
+            println!("Default input config: {:?}", config);
+
+            let (tx, rx) = mpsc::channel();
+
+            let stream = device
+                .build_input_stream(
+                    &config.into(),
+                    move |data: &[f32], _| {
+                        tx.send(data.to_vec()).unwrap();
+                    },
+                    |err| println!("{:#?}", err),
+                    None,
+                )
+                .unwrap();
+            stream.play().unwrap();
+
+            loop {
+                let decode = decoder.decode(&rx.recv().unwrap());
+                if let DecodeResult::Partial(ref image) = decode {
+                    image.save_with_format("out.png", ImageFormat::Png).unwrap();
+                }
+                if let DecodeResult::Finished(ref image) = decode {
+                    image.save_with_format("out.png", ImageFormat::Png).unwrap();
+                    break;
+                }
+            }
+
+            drop(stream);
+            println!("Finished decoding");
+        }
     } else {
-        let reader = ImageReader::open(args.input_file)
+        let reader = ImageReader::open(args.input_file.unwrap())
             .unwrap()
             .decode()
             .unwrap();
@@ -46,27 +105,7 @@ fn main() {
         //let mut signal = Signal::new();
         //signal.push(1200, 50000.);
 
-        let written: &[i16] = &signal.to_samples().convert();
+        let written: &[f64] = &signal.to_samples().convert();
         wavers::write(Path::new(&args.ouput_file), written, SAMPLE_RATE as i32, 1).unwrap();
     }
 }
-
-//fn main() {
-//    let options = NativeOptions {
-//        viewport: ViewportBuilder::default()
-//            .with_inner_size([640.0, 240.0])
-//            .with_drag_and_drop(true),
-//        ..Default::default()
-//    };
-//
-//    eframe::run_native(
-//        "RSSTV",
-//        options,
-//        Box::new(|cc| {
-//            egui_extras::install_image_loaders(&cc.egui_ctx);
-//            Ok(Box::<RSSTV>::default())
-//        }),
-//    )
-//    .unwrap();
-//}
-//

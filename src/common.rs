@@ -42,26 +42,28 @@ impl Signal {
 pub trait SSTVMode {
     fn new() -> Self;
     fn encode(&mut self, image: DynamicImage) -> Signal;
-    fn decode(&mut self, audio: &Vec<i16>) -> DynamicImage {
+    fn decode(&mut self, audio: &Vec<f32>) -> DecodeResult {
         todo!()
     }
     fn get_image(&self) -> DynamicImage;
 }
 
 pub fn within_50hz(a: f64, b: f64) -> bool {
-    (a - b).abs() < 150.
+    (a - b).abs() < 250.
 }
 
 pub struct DSPOut {
-    inner: Vec<f64>,
-    pos: usize
+    pub inner: Vec<f64>,
+    pos: usize,
+    time_pos: f64,
 }
 
 impl DSPOut {
     pub fn new(from: &Vec<f64>) -> DSPOut {
         DSPOut {
             inner: from.clone(),
-            pos: 0
+            pos: 0,
+            time_pos: 0.,
         }
     }
 
@@ -102,11 +104,28 @@ impl DSPOut {
 
         self.pos += total_samples;
 
-
         Some(sum / (total_samples as f64))
+    }
+
+    pub fn set_to(&mut self, pos: usize) {
+        self.pos = pos;
+    }
+
+    pub fn get_pos(&self) -> usize {
+        self.pos
     }
 }
 
-fn us_to_n_samples(s: f64) -> usize {
-    (SAMPLE_RATE as f64 * (s / 1000000.)).round() as usize
+pub fn us_to_n_samples(s: f64) -> usize {
+    (SAMPLE_RATE as f64 * (s / 1_000_000.)).round() as usize
+}
+
+fn n_samples_to_us(samples: usize) -> f64 {
+    (samples as f64 / SAMPLE_RATE as f64) * 1_000_000.
+}
+
+pub enum DecodeResult {
+    Finished(DynamicImage),
+    Partial(DynamicImage),
+    NoneFound,
 }

@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+biquad = "0.5.0"
 clap = { version = "4.5.31", features = ["derive"] }
-eframe = { version = "*", default-features = false, features = ["glow", "wayland", "x11"] }
-egui_extras = { version = "0.31.1", features = ["image", "all_loaders"] }
+cpal = "0.15.3"
 hilbert_transform = "0.1.1"
 image = "0.25.5"
 num-complex = "0.4.6"

@@ -1,4 +1,3 @@
-pub mod app;
 pub mod common;
 pub mod dsp;
 pub mod martinm1;
