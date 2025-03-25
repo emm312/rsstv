@@ -26,6 +26,6 @@ wasm-bindgen-test = "0.3.34"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["cli", "wasm"]
+default = ["cli"]
 cli = ["cpal", "clap"]
 wasm = ["wasm-bindgen", "console_error_panic_hook"]
