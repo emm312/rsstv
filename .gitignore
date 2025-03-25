@@ -1,4 +1,8 @@
 /target
+/pkg
+/www/.bin
+/www/node_modules
+/www/package-lock.json
 .DS_Store
 Cargo.lock
 *.png
