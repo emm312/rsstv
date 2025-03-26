@@ -97,7 +97,7 @@ fn main() {
 
                 // Get data from streaming thread, accumulating into a bigger vec of at least 100k samples
                 // this makes the live decode not be the bottleneck in real time decodes, as it doesn't
-                // have to do the DSP processing as many times which takes roughly 100ms (which happens 
+                // have to do the DSP processing as many times which takes roughly 100ms (which happens
                 // every time we call the decode fn) (filtering, quadrature demod)
                 // This adds up fast when sending buffers of just 512 samples.
                 // TODO: make it faster and send samples directly without accumulating

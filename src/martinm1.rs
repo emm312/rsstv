@@ -218,7 +218,7 @@ impl SSTVMode for MartinM1 {
 impl MartinM1 {
     /// This function looks for the calibration header of the samples, returning
     /// the 8 bit VIS code if one is found.
-    /// 
+    ///
     /// TODO: Generalise to all SSTV modes & remove the self argument.
     fn get_calibration_header(&mut self, sig: &mut DSPOut) -> Option<u8> {
         sig.take_till_frq(1900.)?;

@@ -1,5 +1,3 @@
-
-
 use std::f64::consts::PI;
 
 use image::DynamicImage;
@@ -27,9 +25,9 @@ impl Signal {
 
     /// Get the time-domain samples as opposed to our hybrid
     /// time and frequency domain data.
-    /// 
+    ///
     /// This is what gets written to the WAV file.
-    /// 
+    ///
     /// TODO: Consider switching to outputting a f32 rather than i16
     pub fn to_samples(&self) -> Samples<i16> {
         let mut samples = Vec::new();
@@ -54,7 +52,7 @@ impl Signal {
 
 /// The SSTVMode trait. This trait encompasses all the functions required to implement
 /// a new mode, consisting of 4 functions, primarily `encode` and `decode`.
-/// 
+///
 /// TODO: Move general things from the Martin M1 encoder out and implement more modes.
 pub trait SSTVMode {
     fn new() -> Self;
@@ -73,10 +71,10 @@ pub fn within_250hz(a: f64, b: f64) -> bool {
 
 /// This struct contains the output of the DSP chain - A slice of f64's and
 /// a position through the slice.
-/// 
+///
 /// This struct is used when decoding signals, providing an easy way to iterate
 /// over the elements.
-/// 
+///
 /// TODO: add `take_while_freq_for_atleast` to make header & seperator tone
 /// detection more rigorous
 pub struct DSPOut<'a> {
