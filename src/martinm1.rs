@@ -49,7 +49,7 @@ impl SSTVMode for MartinM1 {
     fn encode(&mut self, image: image::DynamicImage) -> Signal {
         let resize = image.resize_exact(320, 256, FilterType::Nearest);
         let mut out = Signal::new();
-
+        out.push(1000, 200_000.);
         // Start header
         // Comprised of a 1900Hz 300ms leader tone, followed by a 1200Hz 10ms break and another leader
         out.push(1900, 300_000.);
@@ -128,22 +128,28 @@ impl SSTVMode for MartinM1 {
         // it grows to)
         // Would likely speed it up tenfold
 
-        let mut filtered_lp = Vec::with_capacity(audio.len());
+        let mut filtered = Vec::with_capacity(audio.len());
 
         for elem in &self.samples {
-            filtered_lp.push(biquad_lp.run(*elem as f64));
+            filtered.push(biquad_lp.run(*elem as f64));
         }
 
-        let mut filtered_hp = Vec::with_capacity(audio.len());
-
-        for elem in filtered_lp {
-            filtered_hp.push(biquad_hp.run(elem));
+        for elem in filtered.iter_mut() {
+            *elem = biquad_hp.run(*elem);
         }
 
         // Perform a quadrature demodulation on the filtered signal
-        let res = dsp::quadrature_demod(&filtered_hp);
+        let res = dsp::quadrature_demod(&filtered);
 
-        let mut out = DSPOut::new(&res);
+        let mut filtered_dsp = Vec::with_capacity(res.len());
+        let coeffs_lpd = Coefficients::<f64>::from_params(Type::LowPass, fs, 400.hz(), 1.).unwrap();
+        let mut biquad_dsp_out = DirectForm1::<f64>::new(coeffs_lpd);
+        for elem in res {
+            filtered_dsp.push(biquad_dsp_out.run(elem));
+        }
+        //plot!("sda", &filtered_dsp);
+
+        let mut out = DSPOut::new(&filtered_dsp);
 
         // Set the position of the cursor over the samples to the spot the last decode ended at
         out.set_to(self.pos);
@@ -153,6 +159,7 @@ impl SSTVMode for MartinM1 {
             if let None = self.get_calibration_header(&mut out) {
                 return DecodeResult::NoneFound;
             }
+            println!("found header");
         }
 
         // Loop through every row, starting from the last decoded row
@@ -223,12 +230,15 @@ impl MartinM1 {
     fn get_calibration_header(&mut self, sig: &mut DSPOut) -> Option<u8> {
         sig.take_till_frq(1900.)?;
 
-        sig.take_while_frq(1900.)?;
+        sig.take_while_frq_within(1900., 400.)?;
 
         sig.take_till_frq(1200.)?;
 
-        sig.take_till_frq(1900.)?;
-        sig.take_while_frq(1900.)?;
+        let avg = sig.take_us(300_000.)?;
+
+        if (avg-1900.).abs() > 200. {
+            return None;
+        }
 
         let vis = [
             sig.take_us(30_000.)? < 1200.,
@@ -239,7 +249,7 @@ impl MartinM1 {
             sig.take_us(30_000.)? < 1200.,
         ];
 
-        let parity = sig.take_us(30_000.)? < 1200.;
+        let _parity = sig.take_us(30_000.)? < 1200.;
 
         // even parity bit check
         //assert!(

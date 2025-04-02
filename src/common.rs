@@ -1,7 +1,6 @@
 use std::f64::consts::PI;
 
 use image::DynamicImage;
-use wavers::Samples;
 
 use crate::SAMPLE_RATE;
 
@@ -27,21 +26,19 @@ impl Signal {
     /// time and frequency domain data.
     ///
     /// This is what gets written to the WAV file.
-    ///
-    /// TODO: Consider switching to outputting a f32 rather than i16
-    pub fn to_samples(&self) -> Samples<i16> {
+    pub fn to_samples(&self) -> Vec<f32> {
         let mut samples = Vec::new();
         let mut phase: f64 = 0.;
 
         for component in self.inner.iter() {
             let total_length = ((component.len_us as f64 / 1000000.) * SAMPLE_RATE as f64) as usize;
             for _ in 0..total_length {
-                samples.push((phase.sin() * 10000.) as i16);
+                samples.push((phase.sin() * 10.) as f32);
                 phase += 2. * PI * component.freq as f64 / SAMPLE_RATE as f64;
             }
         }
 
-        Samples::from(samples)
+        samples
     }
 
     /// Add a new frequency component to the signal.
@@ -105,6 +102,19 @@ impl<'a> DSPOut<'a> {
         Some(())
     }
 
+    pub fn take_while_frq_within(&mut self, frq: f64, range: f64) -> Option<()> {
+        let mut at = 0;
+        for i in self.pos..self.inner.len() {
+            if !((*self.inner.get(i)? - frq).abs() < range) {
+                at = i;
+                break;
+            }
+        }
+
+        self.pos = at;
+        Some(())
+    }
+
     /// This function will consume samples until they are less than 250Hz from
     /// the `frq` argument, returning Some(()) if it was successful.
     pub fn take_till_frq(&mut self, frq: f64) -> Option<()> {
@@ -149,10 +159,6 @@ impl<'a> DSPOut<'a> {
 
 pub fn us_to_n_samples(s: f64) -> usize {
     (SAMPLE_RATE as f64 * (s / 1_000_000.)).round() as usize
-}
-
-fn n_samples_to_us(samples: usize) -> f64 {
-    (samples as f64 / SAMPLE_RATE as f64) * 1_000_000.
 }
 
 /// A decode result. Either finished, partial, or no image was found.

@@ -15,10 +15,11 @@ cpal = { version = "0.15.3", optional = true }
 hilbert_transform = "0.1.1"
 image = "0.25.5"
 num-complex = "0.4.6"
-wavers = "1.5.1"
 
 wasm-bindgen = { version = "0.2.84", optional = true }
 console_error_panic_hook = { version = "0.1.7", optional = true }
+hound = "3.5.1"
+simple-plot = "0.1.2"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
