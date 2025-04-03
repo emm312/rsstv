@@ -14,10 +14,8 @@ use rsstv::{
 
 use hound::{WavReader, WavSpec, WavWriter};
 
-
 #[cfg(feature = "cli")]
 use clap::Parser;
-
 
 /// CLI argument struct, powered by clap
 #[cfg(feature = "cli")]
@@ -42,7 +40,6 @@ struct Args {
 
 #[cfg(feature = "cli")]
 fn main() {
-
     let args = Args::parse();
 
     let mut mode = MartinM1::new();
@@ -52,8 +49,7 @@ fn main() {
             // If decoding from a WAV file, load samples and decode all at once.
             // Can also make the samples vec into an iterator to split into chunks,
             // useful for testing live decodes.
-            let mut reader = WavReader::open(args.input_file.unwrap())
-                .unwrap();
+            let mut reader = WavReader::open(args.input_file.unwrap()).unwrap();
 
             let samples: Vec<f32> = reader.samples().map(|s| s.unwrap()).collect();
 
@@ -143,12 +139,12 @@ fn main() {
 
         // And write
         let written: &[f32] = &signal.to_samples();
-        
+
         let spec = WavSpec {
             channels: 1,
             sample_rate: SAMPLE_RATE as u32,
             bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float
+            sample_format: hound::SampleFormat::Float,
         };
 
         let mut writer = WavWriter::create(args.ouput_file, spec).unwrap();

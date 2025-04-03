@@ -236,7 +236,7 @@ impl MartinM1 {
 
         let avg = sig.take_us(300_000.)?;
 
-        if (avg-1900.).abs() > 200. {
+        if (avg - 1900.).abs() > 200. {
             return None;
         }
 
