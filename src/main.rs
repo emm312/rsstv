@@ -23,15 +23,19 @@ use clap::Parser;
 #[cfg(feature = "cli")]
 #[derive(Parser)]
 struct Args {
+    /// Image or audio file to encode/decode from
     #[clap()]
     input_file: Option<String>,
 
+    /// The file to write the output WAV to
     #[clap(short, long, default_value = "out.wav")]
     ouput_file: String,
 
+    /// Decode flag - will encode if not passed
     #[clap(short, long)]
     decode: bool,
 
+    /// Decode from the microphone audio input
     #[clap(short, long)]
     mic: bool,
 }
