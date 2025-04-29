@@ -40,6 +40,8 @@ struct Args {
 
 #[cfg(feature = "cli")]
 fn main() {
+    use hound::SampleFormat;
+
     let args = Args::parse();
 
     let mut mode = MartinM1::new();
@@ -50,8 +52,19 @@ fn main() {
             // Can also make the samples vec into an iterator to split into chunks,
             // useful for testing live decodes.
             let mut reader = WavReader::open(args.input_file.unwrap()).unwrap();
+            assert_eq!(reader.spec().sample_rate, SAMPLE_RATE as u32);
 
-            let samples: Vec<f32> = reader.samples().map(|s| s.unwrap()).collect();
+            let samples: Vec<f32>;
+
+            match (reader.spec().sample_format, reader.spec().bits_per_sample) {
+                (SampleFormat::Float, 32) => {
+                    samples = reader.samples().map(|s: Result<f32, _>| s.unwrap()).collect()
+                }
+                (SampleFormat::Int, 16) => {
+                    samples = reader.samples().map(|s: Result<i16, _>| s.unwrap() as f32).collect()
+                }
+                _ => todo!()
+            }
 
             let out = mode.decode(&samples.to_vec());
 

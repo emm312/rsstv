@@ -17,12 +17,14 @@ pub struct SSTVDecoderWASM {
 
 #[wasm_bindgen]
 impl SSTVDecoderWASM {
+    #[wasm_bindgen]
     pub fn new() -> SSTVDecoderWASM {
         SSTVDecoderWASM {
             inner: MartinM1::new(),
         }
     }
 
+    #[wasm_bindgen]
     pub fn decode(&mut self, buf: &[f32]) -> Option<Vec<u8>> {
         let result = self.inner.decode(&buf);
 
@@ -34,7 +36,8 @@ impl SSTVDecoderWASM {
         }
     }
 
-    pub fn encode(&mut self, image: Vec<u8>) -> Vec<i16> {
+    #[wasm_bindgen]
+    pub fn encode(&mut self, image: Vec<u8>) -> Vec<f32> {
         let image = ImageReader::new(Cursor::new(image));
 
         let result = self.inner.encode(image.decode().unwrap());

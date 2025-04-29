@@ -188,7 +188,7 @@ impl SSTVMode for MartinM1 {
                     if let Some(val) = out.take_us(457.6) {
                         // Calculate brightness based off of the average freq over the 457.6μs
                         let brightness = (val - 1500.) / (2300. - 1500.);
-
+ 
                         let mut rgb = self.decoded_image.get_pixel(j, i);
 
                         rgb.channels_mut()[colour] = (brightness * 255.) as u8;

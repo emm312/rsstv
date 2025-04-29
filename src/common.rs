@@ -33,7 +33,7 @@ impl Signal {
         for component in self.inner.iter() {
             let total_length = ((component.len_us as f64 / 1000000.) * SAMPLE_RATE as f64) as usize;
             for _ in 0..total_length {
-                samples.push((phase.sin() * 10.) as f32);
+                samples.push((phase.sin()) as f32);
                 phase += 2. * PI * component.freq as f64 / SAMPLE_RATE as f64;
             }
         }
